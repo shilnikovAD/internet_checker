@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Интернет-метр</title>
+  <link rel="stylesheet" href="/static/css/style.css" />
+</head>
+<body>
+  <main class="container">
+    <header class="topbar">
+      <div class="brand">
+        <span class="brand-dot"></span>
+        <span class="brand-text">Интернет-метр</span>
+      </div>
+    </header>
+
+    <section class="hero">
+      <div class="hero-left">
+        <h1>Проверьте скорость интернета</h1>
+        <p class="subtitle">Быстрое измерение пинга, загрузки и скачивания в браузере.</p>
+        <button id="startBtn" class="primary">Начать тест</button>
+        <div id="status" class="status">Готово к измерению</div>
+
+        <div class="side-metrics">
+          <div class="side-metric">
+            <div class="label">Пинг</div>
+            <div class="value"><span id="ping">-</span> <span class="unit">мс</span></div>
+          </div>
+          <div class="side-metric">
+            <div class="label">Загрузка</div>
+            <div class="value"><span id="upload">-</span> <span class="unit">Мбит/с</span></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="hero-right">
+        <div class="gauge">
+          <div class="gauge-ring"></div>
+          <div class="gauge-center">
+            <div class="gauge-label">Скачивание</div>
+            <div class="gauge-value"><span id="download">-</span></div>
+            <div class="gauge-unit">Мбит/с</div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script src="/static/js/app.js"></script>
+</body>
+</html>
