@@ -6,8 +6,8 @@ const uploadEl = document.getElementById("upload");
 const gaugeRing = document.querySelector(".gauge-ring");
 const brandDot = document.querySelector(".brand-dot");
 
-const DOWNLOAD_SIZE = 10 * 1024 * 1024;
-const UPLOAD_SIZE = 5 * 1024 * 1024;
+const DOWNLOAD_SIZE = 50 * 1024 * 1024;
+const UPLOAD_SIZE = 50 * 1024 * 1024;
 const GAUGE_MAX_MBPS = 500;
 const GAUGE_MAX_DEG = 240;
 

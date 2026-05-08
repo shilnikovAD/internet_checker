@@ -15,7 +15,7 @@ app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 templates = Jinja2Templates(directory=TEMPLATES_DIR)
 
 MAX_DOWNLOAD_BYTES = 50 * 1024 * 1024
-MAX_UPLOAD_BYTES = 20 * 1024 * 1024
+MAX_UPLOAD_BYTES = 50 * 1024 * 1024
 
 
 def iter_bytes(total_bytes: int, chunk_size: int = 256 * 1024):
