@@ -2,11 +2,33 @@
 
 Веб-приложение для измерения скорости интернета: пинг, скачивание и загрузка — прямо в браузере, без сторонних сервисов.
 
----
+## О проекте
 
-## Способ 1 — Локальный запуск (без Docker)
+Сервер на **FastAPI** отдаёт HTML-страницу и три простых эндпоинта:
+- `GET /api/ping` — для замера задержки;
+- `GET /api/download?size=<байт>` — стримит произвольное количество байт для теста скачивания (до 50 МБ);
+- `POST /api/upload` — принимает поток данных от клиента и возвращает реально полученный размер (до 20 МБ).
 
-Самый простой способ, не требует Docker.
+Замеры выполняются на стороне браузера в JavaScript: страница вызывает API сервера и считает скорость по времени и объёму переданных данных.
+
+## Структура проекта
+
+```
+internet_checker/
+├── main.py              # FastAPI-приложение и эндпоинты (/, /api/ping, /api/download, /api/upload)
+├── requirements.txt     # Python-зависимости (FastAPI, Uvicorn, Jinja2)
+├── templates/
+│   └── index.html       # Главная страница приложения
+├── static/
+│   ├── css/style.css    # Стили
+│   └── js/app.js        # Клиентская логика замеров
+├── nginx/
+│   └── nginx.conf       # Конфиг Nginx (для запуска через Docker Compose)
+├── Dockerfile           # Образ приложения
+└── docker-compose.yml   # Сборка app + nginx
+```
+
+## Локальный запуск
 
 ### Требования
 - Python 3.10 или новее
@@ -51,153 +73,3 @@ uvicorn main:app --reload
 ```
 
 Откройте в браузере: **http://127.0.0.1:8000**
-
----
-
-## Способ 2 — Docker Compose (с Nginx)
-
-Запускает приложение + Nginx в контейнерах. Порт: **80**.
-
-### Требования
-- **Windows / macOS** — [Docker Desktop](https://www.docker.com/products/docker-desktop/)
-- **Linux** — Docker Engine + Docker Compose
-
-Проверить установку:
-```bash
-docker --version
-docker compose version
-```
-
-### Запуск
-
-```bash
-# Собрать образ и запустить в фоне
-docker compose up --build -d
-```
-
-Откройте в браузере: **http://localhost**
-
-### Полезные команды
-
-```bash
-# Посмотреть логи
-docker compose logs -f
-
-# Остановить контейнеры
-docker compose down
-
-# Пересобрать после изменений в коде
-docker compose build app && docker compose up -d
-
-# Проверить статус
-docker compose ps
-```
-
----
-
-## Способ 3 — Деплой на VPS
-
-### 1. Установите Docker на сервере
-
-```bash
-curl -fsSL https://get.docker.com | sh
-sudo usermod -aG docker $USER
-newgrp docker
-```
-
-### 2. Скопируйте проект на сервер
-
-```bash
-# С локальной машины:
-scp -r ./internet_checker user@ВАШ_IP:/home/user/internet_checker
-
-# Или клонируйте прямо на сервере:
-git clone https://github.com/ВАШ_ЛОГИН/internet_checker.git ~/internet_checker
-```
-
-### 3. Откройте порт 80 в файрволе
-
-```bash
-# Ubuntu / Debian (ufw)
-sudo ufw allow 80/tcp
-sudo ufw reload
-
-# CentOS / Fedora (firewalld)
-sudo firewall-cmd --permanent --add-service=http
-sudo firewall-cmd --reload
-```
-
-> На облачных провайдерах (Hetzner, DigitalOcean, Timeweb и др.) также откройте порт 80 в панели управления — раздел **Firewall** или **Security Groups**.
-
-### 4. Запустите
-
-```bash
-cd ~/internet_checker
-docker compose up -d --build
-```
-
-Приложение доступно по адресу: **http://ВАШ_IP**
-
-### 5. Автозапуск при перезагрузке
-
-Директива `restart: unless-stopped` в `docker-compose.yml` уже обеспечивает автозапуск. Убедитесь, что Docker включён в автозагрузку:
-
-```bash
-sudo systemctl enable docker
-```
-
----
-
-## HTTPS (опционально)
-
-### Вариант A — Caddy (проще всего)
-
-```bash
-sudo apt install caddy
-```
-
-Создайте `/etc/caddy/Caddyfile`:
-```
-speedtest.example.com {
-    reverse_proxy localhost:8000
-}
-```
-
-В `docker-compose.yml` измените публикацию порта app:
-```yaml
-ports:
-  - "127.0.0.1:8000:8000"
-```
-И удалите сервис `nginx` из compose — Caddy будет выполнять роль прокси.
-
-```bash
-sudo systemctl reload caddy
-```
-
-### Вариант B — Certbot + системный Nginx
-
-```bash
-sudo apt install nginx certbot python3-certbot-nginx
-sudo certbot --nginx -d speedtest.example.com
-```
-
-Остановите контейнер nginx: `docker compose stop nginx`, и проксируйте запросы с хостового Nginx на `http://127.0.0.1:8000`.
-
----
-
-## API
-
-| Метод | Путь | Параметры | Описание |
-|-------|------|-----------|----------|
-| `GET` | `/` | — | Страница приложения |
-| `GET` | `/api/ping` | — | `{"server_time": 1234567890.0}` |
-| `GET` | `/api/download` | `size` (байт, макс 50 МБ) | Стриминг данных для теста скачивания |
-| `POST` | `/api/upload` | тело запроса | `{"received_bytes": <n>}` |
-
-```bash
-# Примеры через curl
-curl http://localhost:8000/api/ping
-
-curl -o /dev/null -w "Скорость: %{speed_download} Б/с\n" \
-     "http://localhost:8000/api/download?size=1048576"
-```
