@@ -9,6 +9,7 @@ const brandDot = document.querySelector(".brand-dot");
 
 const DOWNLOAD_SIZE = 50 * 1024 * 1024;
 const UPLOAD_SIZE = 50 * 1024 * 1024;
+const PARALLEL_STREAMS = 6;
 const GAUGE_MAX_MBPS = 500;
 const GAUGE_MAX_DEG = 240;
 
@@ -41,72 +42,97 @@ async function measurePing(rounds = 5) {
   return total / rounds;
 }
 
-async function measureDownload(bytes) {
-  const response = await fetch(`/api/download?size=${bytes}&ts=${Date.now()}`, {
-    cache: "no-store",
-  });
+async function downloadStream(perStreamBytes, idx, start, totals) {
+  const response = await fetch(
+    `/api/download?size=${perStreamBytes}&ts=${Date.now()}&i=${idx}`,
+    { cache: "no-store" }
+  );
 
-  // Streaming path: show live speed while downloading
   if (response.body && response.body.getReader) {
     const reader = response.body.getReader();
-    let received = 0;
-    const start = performance.now();
-
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
-      received += value.byteLength;
+      totals.received += value.byteLength;
       const elapsed = (performance.now() - start) / 1000;
       if (elapsed > 0.15) {
-        const speed = ((received * 8) / elapsed) / 1_000_000;
+        const speed = ((totals.received * 8) / elapsed) / 1_000_000;
         downloadEl.textContent = formatMbps(speed);
         setDownloadGauge(speed);
       }
     }
-
-    const elapsed = (performance.now() - start) / 1000;
-    return ((received * 8) / elapsed) / 1_000_000;
+    return;
   }
 
-  // Fallback for browsers without streaming support
-  const start = performance.now();
-  await response.arrayBuffer();
-  const elapsed = (performance.now() - start) / 1000;
-  return ((bytes * 8) / elapsed) / 1_000_000;
+  // Fallback for browsers without ReadableStream support
+  const buf = await response.arrayBuffer();
+  totals.received += buf.byteLength;
 }
 
-function measureUpload(bytes) {
-  const data = new Uint8Array(bytes);
+async function measureDownload(totalBytes) {
+  const perStream = Math.ceil(totalBytes / PARALLEL_STREAMS);
+  const start = performance.now();
+  const totals = { received: 0 };
+
+  await Promise.all(
+    Array.from({ length: PARALLEL_STREAMS }, (_, i) =>
+      downloadStream(perStream, i, start, totals)
+    )
+  );
+
+  const elapsed = (performance.now() - start) / 1000;
+  return ((totals.received * 8) / elapsed) / 1_000_000;
+}
+
+function makeRandomChunk(size) {
+  const data = new Uint8Array(size);
   const chunk = 65536;
   for (let i = 0; i < data.length; i += chunk) {
-    window.crypto.getRandomValues(data.subarray(i, i + chunk));
+    window.crypto.getRandomValues(data.subarray(i, Math.min(i + chunk, data.length)));
   }
+  return data;
+}
 
+function uploadStream(data, idx, start, loaded) {
   // XHR is used instead of fetch because fetch() does not expose upload progress.
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
-    const start = performance.now();
 
     xhr.upload.onprogress = (e) => {
       if (!e.lengthComputable) return;
+      loaded[idx] = e.loaded;
       const elapsed = (performance.now() - start) / 1000;
       if (elapsed > 0.15) {
-        const speed = ((e.loaded * 8) / elapsed) / 1_000_000;
+        const sum = loaded.reduce((a, b) => a + b, 0);
+        const speed = ((sum * 8) / elapsed) / 1_000_000;
         uploadEl.textContent = formatMbps(speed);
         setUploadGauge(speed);
       }
     };
     xhr.onload = () => {
-      const elapsed = (performance.now() - start) / 1000;
-      resolve(((bytes * 8) / elapsed) / 1_000_000);
+      loaded[idx] = data.length;
+      resolve();
     };
     xhr.onerror = () => reject(new Error("upload failed"));
     xhr.onabort = () => reject(new Error("upload aborted"));
 
-    xhr.open("POST", "/api/upload");
+    xhr.open("POST", `/api/upload?i=${idx}`);
     xhr.setRequestHeader("Content-Type", "application/octet-stream");
     xhr.send(data);
   });
+}
+
+async function measureUpload(totalBytes) {
+  const perStream = Math.ceil(totalBytes / PARALLEL_STREAMS);
+  const buffers = Array.from({ length: PARALLEL_STREAMS }, () => makeRandomChunk(perStream));
+  const totalGenerated = buffers.reduce((a, b) => a + b.length, 0);
+  const loaded = new Array(PARALLEL_STREAMS).fill(0);
+  const start = performance.now();
+
+  await Promise.all(buffers.map((data, idx) => uploadStream(data, idx, start, loaded)));
+
+  const elapsed = (performance.now() - start) / 1000;
+  return ((totalGenerated * 8) / elapsed) / 1_000_000;
 }
 
 async function runTest() {
