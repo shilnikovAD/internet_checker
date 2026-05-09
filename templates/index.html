@@ -27,22 +27,47 @@
             <div class="label">Пинг</div>
             <div class="value"><span id="ping">-</span> <span class="unit">мс</span></div>
           </div>
-          <div class="side-metric">
-            <div class="label">Загрузка</div>
-            <div class="value"><span id="upload">-</span> <span class="unit">Мбит/с</span></div>
-          </div>
         </div>
       </div>
 
       <div class="hero-right">
-        <div class="gauge">
-          <div class="gauge-ring"></div>
-          <div class="gauge-center">
-            <div class="gauge-label">Скачивание</div>
-            <div class="gauge-value"><span id="download">-</span></div>
-            <div class="gauge-unit">Мбит/с</div>
+        <div class="gauges">
+          <div class="gauge" data-kind="download">
+            <div class="gauge-ring"></div>
+            <div class="gauge-center">
+              <div class="gauge-label">Download</div>
+              <div class="gauge-value"><span id="download">-</span></div>
+              <div class="gauge-unit">Мбит/с</div>
+            </div>
+          </div>
+          <div class="gauge" data-kind="upload">
+            <div class="gauge-ring"></div>
+            <div class="gauge-center">
+              <div class="gauge-label">Upload</div>
+              <div class="gauge-value"><span id="upload">-</span></div>
+              <div class="gauge-unit">Мбит/с</div>
+            </div>
           </div>
         </div>
+      </div>
+    </section>
+
+    <section class="whoami" id="whoami" hidden>
+      <div class="whoami-row">
+        <span class="whoami-label">IP:</span>
+        <span class="whoami-value" id="whoamiIp">—</span>
+      </div>
+      <div class="whoami-row">
+        <span class="whoami-label">Провайдер:</span>
+        <span class="whoami-value" id="whoamiIsp">—</span>
+      </div>
+      <div class="whoami-row">
+        <span class="whoami-label">Автономная система:</span>
+        <span class="whoami-value" id="whoamiAs">—</span>
+      </div>
+      <div class="whoami-row">
+        <span class="whoami-label">Локация:</span>
+        <span class="whoami-value" id="whoamiGeo">—</span>
       </div>
     </section>
   </main>

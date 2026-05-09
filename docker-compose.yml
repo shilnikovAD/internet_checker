@@ -18,8 +18,11 @@ services:
     restart: unless-stopped
     ports:
       - "80:80"
+      - "8443:443"
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - /etc/letsencrypt:/etc/letsencrypt:ro
+      - /var/www/certbot:/var/www/certbot:ro
     depends_on:
       app:
         condition: service_healthy

@@ -3,7 +3,8 @@ const statusEl = document.getElementById("status");
 const pingEl = document.getElementById("ping");
 const downloadEl = document.getElementById("download");
 const uploadEl = document.getElementById("upload");
-const gaugeRing = document.querySelector(".gauge-ring");
+const downloadRing = document.querySelector('.gauge[data-kind="download"] .gauge-ring');
+const uploadRing = document.querySelector('.gauge[data-kind="upload"] .gauge-ring');
 const brandDot = document.querySelector(".brand-dot");
 
 const DOWNLOAD_SIZE = 50 * 1024 * 1024;
@@ -14,15 +15,19 @@ const GAUGE_MAX_DEG = 240;
 const setStatus = (text) => (statusEl.textContent = text);
 const formatMbps = (v) => v.toFixed(2);
 
-function setGauge(speedMbps) {
+function setGauge(ring, speedMbps) {
   const deg = Math.min((speedMbps / GAUGE_MAX_MBPS) * GAUGE_MAX_DEG, GAUGE_MAX_DEG);
   const d = deg.toFixed(1);
-  gaugeRing.style.background =
+  ring.style.background =
     `conic-gradient(#ffd54a 0deg, #ffd54a ${d}deg, #e9eef7 ${d}deg, #e9eef7 360deg)`;
 }
 
+const setDownloadGauge = (s) => setGauge(downloadRing, s);
+const setUploadGauge = (s) => setGauge(uploadRing, s);
+
 function setTesting(active) {
-  gaugeRing.classList.toggle("testing", active);
+  downloadRing.classList.toggle("testing", active);
+  uploadRing.classList.toggle("testing", active);
   brandDot.classList.toggle("testing", active);
 }
 
@@ -55,7 +60,7 @@ async function measureDownload(bytes) {
       if (elapsed > 0.15) {
         const speed = ((received * 8) / elapsed) / 1_000_000;
         downloadEl.textContent = formatMbps(speed);
-        setGauge(speed);
+        setDownloadGauge(speed);
       }
     }
 
@@ -70,20 +75,38 @@ async function measureDownload(bytes) {
   return ((bytes * 8) / elapsed) / 1_000_000;
 }
 
-async function measureUpload(bytes) {
+function measureUpload(bytes) {
   const data = new Uint8Array(bytes);
   const chunk = 65536;
   for (let i = 0; i < data.length; i += chunk) {
     window.crypto.getRandomValues(data.subarray(i, i + chunk));
   }
-  const start = performance.now();
-  await fetch("/api/upload", {
-    method: "POST",
-    headers: { "Content-Type": "application/octet-stream" },
-    body: data,
+
+  // XHR is used instead of fetch because fetch() does not expose upload progress.
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    const start = performance.now();
+
+    xhr.upload.onprogress = (e) => {
+      if (!e.lengthComputable) return;
+      const elapsed = (performance.now() - start) / 1000;
+      if (elapsed > 0.15) {
+        const speed = ((e.loaded * 8) / elapsed) / 1_000_000;
+        uploadEl.textContent = formatMbps(speed);
+        setUploadGauge(speed);
+      }
+    };
+    xhr.onload = () => {
+      const elapsed = (performance.now() - start) / 1000;
+      resolve(((bytes * 8) / elapsed) / 1_000_000);
+    };
+    xhr.onerror = () => reject(new Error("upload failed"));
+    xhr.onabort = () => reject(new Error("upload aborted"));
+
+    xhr.open("POST", "/api/upload");
+    xhr.setRequestHeader("Content-Type", "application/octet-stream");
+    xhr.send(data);
   });
-  const elapsed = (performance.now() - start) / 1000;
-  return ((bytes * 8) / elapsed) / 1_000_000;
 }
 
 async function runTest() {
@@ -91,7 +114,8 @@ async function runTest() {
   pingEl.textContent = "-";
   downloadEl.textContent = "-";
   uploadEl.textContent = "-";
-  setGauge(0);
+  setDownloadGauge(0);
+  setUploadGauge(0);
   setTesting(true);
 
   try {
@@ -99,25 +123,73 @@ async function runTest() {
     const ping = await measurePing();
     pingEl.textContent = ping.toFixed(0);
 
-    setStatus("Измерение скачивания…");
+    setStatus("Измерение download…");
     const download = await measureDownload(DOWNLOAD_SIZE);
     downloadEl.textContent = formatMbps(download);
-    setGauge(download);
+    setDownloadGauge(download);
 
-    setStatus("Измерение загрузки…");
+    setStatus("Измерение upload…");
     const upload = await measureUpload(UPLOAD_SIZE);
     uploadEl.textContent = formatMbps(upload);
+    setUploadGauge(upload);
 
     setStatus("Готово");
   } catch (err) {
     console.error(err);
     setStatus("Ошибка теста. Попробуйте снова.");
-    setGauge(0);
+    setDownloadGauge(0);
+    setUploadGauge(0);
   } finally {
     startBtn.disabled = false;
     setTesting(false);
   }
 }
 
-setGauge(0);
+async function loadWhoami() {
+  const root = document.getElementById("whoami");
+  const ipEl = document.getElementById("whoamiIp");
+  const ispEl = document.getElementById("whoamiIsp");
+  const asEl = document.getElementById("whoamiAs");
+  const geoEl = document.getElementById("whoamiGeo");
+
+  try {
+    const r = await fetch("/api/whoami", { cache: "no-store" });
+    if (!r.ok) return;
+    const d = await r.json();
+
+    ipEl.textContent = d.ip || "—";
+
+    if (d.private) {
+      ispEl.textContent = "локальная сеть";
+      asEl.textContent = "—";
+      geoEl.textContent = "—";
+      root.hidden = false;
+      return;
+    }
+
+    ispEl.textContent = d.isp || d.org || "—";
+
+    if (d.as_number) {
+      const a = document.createElement("a");
+      a.href = `https://bgp.he.net/AS${d.as_number}`;
+      a.target = "_blank";
+      a.rel = "noopener noreferrer";
+      a.textContent = d.as || `AS${d.as_number}`;
+      asEl.replaceChildren(a);
+    } else {
+      asEl.textContent = d.as || "—";
+    }
+
+    const geoParts = [d.city, d.country].filter(Boolean);
+    geoEl.textContent = geoParts.length ? geoParts.join(", ") : "—";
+
+    root.hidden = false;
+  } catch (e) {
+    console.error(e);
+  }
+}
+
+setDownloadGauge(0);
+setUploadGauge(0);
 startBtn.addEventListener("click", runTest);
+void loadWhoami();
